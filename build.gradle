@@ -1,0 +1,98 @@
+plugins {
+    id "java"
+    id "edu.wpi.first.GradleRIO" version "2024.3.2"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+def ROBOT_MAIN_CLASS = "frc.robot.Main"
+
+// Definindo alvos (RoboRIO) e artefatos (arquivos a serem implantados)
+deploy {
+    targets {
+        roborio(getTargetTypeClass('RoboRIO')) {
+            team = project.frc.getTeamNumber()
+            debug = project.frc.getDebugOrDefault(false)
+
+            artifacts {
+                frcJava(getArtifactTypeClass('FRCJavaArtifact')) {
+                }
+                frcStaticFileDeploy(getArtifactTypeClass('FileTreeArtifact')) {
+                    files = project.fileTree('src/main/deploy')
+                    directory = '/home/lvuser/deploy'
+                }
+            }
+        }
+    }
+}
+
+def deployArtifact = deploy.targets.roborio.artifacts.frcJava
+
+// Defina se deve ou não usar a depuração para JNI.
+wpi.java.debugJni = false
+
+// Configuração para suporte de desktop.
+def includeDesktopSupport = false
+
+// Definindo dependências (WPILib, bibliotecas de fornecedores, etc)
+dependencies {
+    // Dependência para o Phoenix Java (CTRE)
+    //implementation 'com.ctre.phoenix:phoenix-java:5.23.0'
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+
+    // Configurações de depuração e liberação para o RoboRIO
+    roborioDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.roborio)
+    roborioDebug wpi.java.vendor.jniDebug(wpi.platforms.roborio)
+    roborioRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.roborio)
+    roborioRelease wpi.java.vendor.jniRelease(wpi.platforms.roborio)
+
+    // Configurações de depuração e liberação para desktop
+    nativeDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.desktop)
+    nativeDebug wpi.java.vendor.jniDebug(wpi.platforms.desktop)
+    simulationDebug wpi.sim.enableDebug()
+
+    nativeRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
+    nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
+    simulationRelease wpi.sim.enableRelease()
+
+    // Dependências de testes
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+    systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
+}
+
+// Configuração de simulação
+wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addDriverstation()
+
+// Configuração do arquivo JAR
+jar {
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from sourceSets.main.allSource
+    manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// Configuração das tarefas de deploy
+deployArtifact.jarTask = jar
+wpi.java.configureExecutableTasks(jar)
+wpi.java.configureTestTasks(test)
+
+// Configuração para concatenar strings inline durante a compilação
+tasks.withType(JavaCompile) {
+    options.compilerArgs.add '-XDstringConcat=inline'
+}
+
+repositories {
+    // Repositório Maven da CTRE para Phoenix Java
+    mavenCentral()
+    // { url 'https://maven.ctr-electronics.com/release/' }
+}
